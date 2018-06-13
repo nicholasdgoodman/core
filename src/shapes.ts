@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import { PortInfo } from './browser/port_discovery';
-import { BrowserWindow as BrowserWindowElectron, webContents } from 'electron';
+import { BrowserWindow as BrowserWindowElectron } from 'electron';
 
 export interface Identity {
     uuid: string;
@@ -331,4 +331,14 @@ export interface WindowInitialOptionSet {
     elIPCConfig: {
         channels: ElectronIpcChannels
     };
+}
+
+export interface SavedDiskBounds {
+    active: string;
+    height: number;
+    width: number;
+    left: number;
+    top: number;
+    name: string;
+    windowState: string;
 }
