@@ -6,7 +6,13 @@ class MyEmitter extends EventEmitter {
     }
 }
 
-abstract class BaseTransport {
+export interface ClientConnection extends EventEmitter {
+    send(data: any): void;
+    close(): void;
+    isOpen(): void;
+}
+
+export abstract class BroadcastConnection {
     protected eventEmitter: MyEmitter;
 
     constructor() {
@@ -20,5 +26,3 @@ abstract class BaseTransport {
     // not implemented in base
     public abstract publish(data: any): boolean;
 }
-
-export default BaseTransport;

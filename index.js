@@ -535,7 +535,7 @@ function initServer() {
 
     apiProtocol.initApiHandlers();
 
-    socketServer.on('server/error', function(err) {
+    socketServer.on(route.server('error'), function(err) {
         // Guard against non listen errors and infinite retries.
         if (err && err.syscall === 'listen' && !attemptedHardcodedPort) {
             // Assuming connection issue. Bind on any available port
@@ -545,15 +545,11 @@ function initServer() {
         }
     });
 
-    socketServer.on('server/open', function(port) {
+    socketServer.on(route.server('open'), function(port) {
         console.log('Opened on', port);
         portDiscovery.broadcast(portDiscovery.getPortInfoByArgs(coreState.argo, port));
         resolveServerReady();
         handleDeferredLaunches();
-    });
-
-    socketServer.on('connection/message', function(id, message) {
-        console.log('Receieved message', message);
     });
 
     return socketServer;

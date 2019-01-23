@@ -1,10 +1,10 @@
 
 import { MessageWindow } from 'electron';
-import BaseTransport from './base';
+import { BroadcastConnection } from './base';
 import * as coreState from '../core_state';
 import * as log from '../log';
 
-class WMCopyDataTransport extends BaseTransport {
+class WMCopyDataTransport extends BroadcastConnection {
     private _messageWindow: MessageWindow;
     private senderClass: string;
     private targetClass: string;

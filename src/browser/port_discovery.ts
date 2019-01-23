@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { Base, ChromiumIPC, UnixDomainSocket, WMCopyData } from './transport';
+import { BroadcastConnection, ChromiumIPC, UnixDomainSocket, WMCopyData } from './transport';
 import * as log from './log';
 import route from '../common/route';
 import { isMeshEnabled } from './connection_manager';
@@ -24,14 +24,14 @@ export interface PortInfo {
 }
 
 export class PortDiscovery extends EventEmitter {
-    private _transport: Base;
+    private _transport: BroadcastConnection;
     private _namedPipe: ChromiumIPC;
 
     constructor() {
         super();
     }
 
-    private constructTransport(): Base {
+    private constructTransport(): BroadcastConnection {
         if (!this._transport) {
             if (process.platform === 'win32') {
                 // Send and receive messages on the same Window's classname

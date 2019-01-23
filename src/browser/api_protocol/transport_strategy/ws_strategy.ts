@@ -44,7 +44,10 @@ export class WebSocketStrategy extends ApiTransportBase<MessagePackage> {
     }
 
     public registerMessageHandlers(): void {
-        socketServer.on(route.connection('message'), this.onMessage.bind(this));
+        socketServer.on(route.server('connection'), (clientId) => {
+            socketServer.getClientById(clientId)
+                .on(route.connection('message'), (id: number, data: any) => this.onMessage(id, data));
+        });
     }
 
     public send(externalConnection: any, payload: any): void {
@@ -52,9 +55,9 @@ export class WebSocketStrategy extends ApiTransportBase<MessagePackage> {
         const message = JSON.stringify(payload);
 
         // Make sure not to send any message to a closed/closing websocket.
-        if (socketServer.isConnectionOpen(id)) {
+        if (socketServer.getClientById(id).isOpen()) {
             log.writeToLog('info', `sent external-adapter <= ${id} ${message}`);
-            socketServer.send(id, message);
+            socketServer.getClientById(id).send(message);
         } else { // log the unsent message
             log.writeToLog('info', `Socket connection is not open, therefore not sending message to external adapter <= ${id} ${message}`);
         }
@@ -112,7 +115,7 @@ export class WebSocketStrategy extends ApiTransportBase<MessagePackage> {
 
             // Don't try to send a response/ack using closed/closing websocket, because it will error out anyways.
             // Instead, we are going to print nice error explaining what happened
-            if (!socketServer.isConnectionOpen(id)) {
+            if (!socketServer.getClientById(id).isOpen()) {
                 system.debugLog(1,
                     `Aborted trying to send a response to external-adapter (ID: ${id}). ` +
                     `Message was going to send: ${JSON.stringify(ackObj)}`
@@ -121,7 +124,7 @@ export class WebSocketStrategy extends ApiTransportBase<MessagePackage> {
             }
 
             system.debugLog(1, `sent external-adapter <= ${id} ${JSON.stringify(ackObj)}`);
-            socketServer.send(id, JSON.stringify(ackObj));
+            socketServer.getClientById(id).send(JSON.stringify(ackObj));
         };
     }
 

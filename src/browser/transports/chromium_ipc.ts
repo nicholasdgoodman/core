@@ -1,7 +1,7 @@
 import { chromeIpcClient as ChromeIpcClient } from 'electron';
-import BaseTransport from './base';
+import { BroadcastConnection } from './base';
 
-class ChromiumIPCTransport extends BaseTransport {
+class ChromiumIPCTransport extends BroadcastConnection {
     private connected: boolean;
     private ipc: ChromeIpcClient;
 

@@ -3,6 +3,7 @@ import ofEvents from '../of_events';
 import { Identity, Listener } from '../../shapes';
 import * as ProcessTracker from '../process_tracker.js';
 import route from '../../common/route';
+import { ClientConnection } from '../transport';
 
 const authenticatedConnections: ExternalApplicationOptions[] = [];
 
@@ -13,6 +14,7 @@ export interface ExternalApplicationClient {
 
 export interface ExternalApplicationOptions extends Identity {
     client?: ExternalApplicationClient;
+    connection?: ClientConnection;
     configUrl?: string;
     id: number;
     licenseKey?: string;
@@ -49,12 +51,21 @@ export module ExternalApplication {
 
     export function addExternalConnection(externalConnObj: ExternalApplicationOptions) {
         const {
-            uuid
+            uuid,
+            connection
         } = externalConnObj;
+
+        connection.once(route.connection('close'), () => {
+            //this will raise the disconnected event
+            removeExternalConnection(externalConnObj);
+
+             //TODO: is this still needed? conider external-application/disconnected instead
+            ofEvents.emit(route('externalConn', 'closed'), externalConnObj);
+        });
 
         //TODO: compare perf from this and a map.
         authenticatedConnections.push(externalConnObj);
-        ofEvents.emit(route.externalApplication('connected', externalConnObj.uuid), {
+        ofEvents.emit(route.externalApplication('connected', uuid), {
             uuid
         });
         ofEvents.emit(route.externalApplication('connected'), {

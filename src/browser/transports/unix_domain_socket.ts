@@ -7,7 +7,7 @@ import { exec } from 'child_process';
 // will not compile if the module isn't present at time of compilation
 const unixDgram = process.platform === 'win32' ? {} : require('unix-dgram');
 
-import BaseTransport from './base';
+import { BroadcastConnection } from './base';
 import * as coreState from '../core_state';
 import * as log from '../log';
 
@@ -20,7 +20,7 @@ interface Socket {
     send: (buffer: Buffer, offset: number, length: number, path: FileDescriptor) => void;
 }
 
-class UnixDomainSocket extends BaseTransport {
+class UnixDomainSocket extends BroadcastConnection {
     private filenamePrefix: string;
     private serverName: FileDescriptor;
     private server: Socket;

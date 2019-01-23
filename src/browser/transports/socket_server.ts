@@ -2,14 +2,16 @@ import * as http from 'http';
 import { EventEmitter } from 'events';
 import * as WebSocket from 'ws';
 import { AddressInfo } from 'net';
+import { ClientConnection } from './base';
+import { WebSocketClient } from './socket_client';
 
 import * as log from '../log';
 import idPool from '../int_pool';
 import route from '../../common/route';
 
-class Server extends EventEmitter {
+class WebSocketServer extends EventEmitter {
     private hasStarted: boolean;
-    private activeConnections: { [id: string]: WebSocket };
+    private activeConnections: { [id: string]: WebSocketClient };
     private httpServer: http.Server;
     private httpServerError: boolean;
 
@@ -38,21 +40,6 @@ class Server extends EventEmitter {
         return (serverAddress && serverAddress.port) || null;
     }
 
-    public publish(message: string) {
-        const usedIds = Object.keys(this.activeConnections);
-        usedIds.forEach((id) => {
-            if (this.activeConnections[id]) {
-                this.activeConnections[id].send(message);
-            }
-        });
-    }
-
-    public send(id: number, message: string) {
-        if (this.activeConnections[id]) {
-            this.activeConnections[id].send(message);
-        }
-    }
-
     public closeAllConnections() {
         const usedIds = Object.keys(this.activeConnections);
         usedIds.forEach((id) => {
@@ -60,13 +47,6 @@ class Server extends EventEmitter {
                 this.activeConnections[id].close();
             }
         });
-    }
-
-    public closeConnection(id: number) {
-        if (this.activeConnections[id]) {
-            // Removed from map on close event
-            this.activeConnections[id].close();
-        }
     }
 
     public start(port: number) {
@@ -94,31 +74,18 @@ class Server extends EventEmitter {
                 this.emit(route.server('error'), err);
             });
 
-            wss.on('connection', (ws) => {
+            wss.on('connection', (ws: WebSocket) => {
                 const id = idPool.next();
-                this.activeConnections[id] = <WebSocket>ws;
-                // Unused events
-                // ping
-                // pong
+                const client = new WebSocketClient(ws, id);
 
-                ws.on('error', (error) => {
-                    this.emit(route.connection('error'), id, error);
-                });
+                this.activeConnections[id] = client;
 
-                ws.on('close', ( /*code,message*/ ) => {
+                client.on(route.connection('close'), (id) => {
                     delete this.activeConnections[id];
-                    idPool.release(id);
-                    ws = null;
-                    this.emit(route.connection('close'), id);
+                    this.emit(route.server('close'), id);
                 });
 
-                ws.on('open', ( /*open*/ ) => {
-                    this.emit(route.connection('open'), id);
-                });
-
-                ws.on('message', (data, flags) => {
-                    this.emit(route.connection('message'), id, JSON.parse(data), flags);
-                });
+                this.emit(route.server('connection'), id);
             });
 
             this.emit(route.server('open'), this.getPort());
@@ -127,17 +94,16 @@ class Server extends EventEmitter {
         this.hasStarted = true;
     }
 
-    public connectionAuthenticated(id: number, uuid: string) {
-        this.emit(route.connection('authenticated'), {
-            id,
-            uuid
-        });
-    }
-
-    public isConnectionOpen(id: number) {
-        const socket = this.activeConnections[id];
-        return typeof socket === 'object' && socket.readyState === socket.OPEN;
+    //TODO: this map should live in corestate somehow
+    public getClientById(id: number): ClientConnection {
+        //TODO: put the no-ops or safety logic elsewhere
+        //      missing all the eventlistener stuff
+        return this.activeConnections[id] || <any>{
+            send: () => { /* do nothing */ },
+            close: () => { /* do nothing */ },
+            isOpen: () => false
+        };
     }
 }
 
-export default new Server();
+export default new WebSocketServer();

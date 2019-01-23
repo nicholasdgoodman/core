@@ -32,15 +32,21 @@ var pendingAuthentications = new Map(),
     };
 
 function registerExternalConnection(identity, message, ack) {
-    let uuidToRegister = message.payload.uuid;
+    let uuid = message.payload.uuid;
     let token = electronApp.generateGUID();
     let dataAck = _.clone(successAck);
     dataAck.data = {
-        uuid: uuidToRegister,
+        uuid,
         token
     };
 
-    addPendingAuthentication(uuidToRegister, token, null, identity, null);
+    addPendingAuthentication({
+        uuid,
+        token,
+        sponsorUuid: identity.uuid,
+        type: AUTH_TYPE.sponsored
+    });
+
     ack(dataAck);
 }
 
@@ -77,9 +83,16 @@ function onRequestExternalAuth(id, message) {
     file = getAuthFile();
     token = electronApp.generateGUID();
 
-    addPendingAuthentication(uuid, token, file, null, message.payload);
+    addPendingAuthentication({
+        id,
+        uuid,
+        token,
+        file,
+        authReqPayload: message.payload,
+        type: AUTH_TYPE.file
+    });
 
-    socketServer.send(id, JSON.stringify({
+    socketServer.getClientById(id).send(JSON.stringify({
         action: 'external-authorization-response',
         payload: {
             file,
@@ -92,8 +105,11 @@ function onRequestExternalAuth(id, message) {
 function onRequestAuthorization(id, data) {
     const uuid = data.payload.uuid;
     const authObj = pendingAuthentications.get(uuid);
+    const connection = socketServer.getClientById(id);
+
     const externalConnObj = Object.assign({}, data.payload, {
-        id
+        id,
+        connection
     });
     if (authObj && authObj.authReqPayload) {
         externalConnObj.configUrl = authObj.authReqPayload.configUrl;
@@ -115,10 +131,10 @@ function onRequestAuthorization(id, data) {
             authorizationResponse.payload.reason = error || 'Invalid token or file';
         }
 
-        socketServer.send(id, JSON.stringify(authorizationResponse));
+        socketServer.getClientById(id).send(JSON.stringify(authorizationResponse));
         if (success) {
+            //Emits the external-application/connected event
             ExternalApplication.addExternalConnection(externalApplicationOptions);
-            socketServer.connectionAuthenticated(id, uuid);
 
             rvmMessageBus.registerLicenseInfo({
                 data: {
@@ -132,11 +148,8 @@ function onRequestAuthorization(id, data) {
                 }
             }, externalApplicationOptions.configUrl);
         } else {
-            socketServer.closeConnection(id);
+            socketServer.getClientById(id).close();
         }
-
-        cleanPendingRequest(authObj);
-
     });
 }
 
@@ -145,17 +158,35 @@ function getAuthFile() {
     return `${electronApp.getPath('userData')}-${electronApp.generateGUID()}`;
 }
 
-function addPendingAuthentication(uuid, token, file, sponsor, authReqPayload) {
-    let authObj = {
-        uuid,
-        token,
-        file,
-        sponsor,
-        authReqPayload
+function addPendingAuthentication(authObj) {
+    const successEventSource = ofEvents;
+    const successTopic = route.externalApplication('connected', authObj.uuid);
+
+    //TODO: Consider if connection events should emit on ofEvents
+    const failureEventSource =
+        authObj.id ? socketServer.getClientById(authObj.id) :
+        authObj.sponsorUuid ? ofEvents :
+        undefined;
+    const failureTopic =
+        authObj.id ? route.connection('close') :
+        authObj.sponsorUuid ? route.application('closed', authObj.sponsorUuid) :
+        undefined;
+
+    if (!failureEventSource || !failureTopic) {
+        //Invalid authObj, abort
+        return;
+    }
+
+    const onCompletion = () => {
+        successEventSource.removeListener(successTopic, onCompletion);
+        failureEventSource.removeListener(failureTopic, onCompletion);
+        cleanPendingAuthorization(authObj);
     };
 
-    authObj.type = file ? AUTH_TYPE.file : AUTH_TYPE.sponsored;
-    pendingAuthentications.set(uuid, authObj);
+    successEventSource.on(successTopic, onCompletion);
+    failureEventSource.on(failureTopic, onCompletion);
+
+    pendingAuthentications.set(authObj.uuid, authObj);
 }
 
 function authenticateUuid(authObj, authRequest, cb) {
@@ -177,7 +208,7 @@ function authenticateUuid(authObj, authRequest, cb) {
     }
 }
 
-function cleanPendingRequest(authObj) {
+function cleanPendingAuthorization(authObj) {
     if (authObj && authObj.type === AUTH_TYPE.file) {
         fs.unlink(authObj.file, err => {
             //really don't care about this error but log it either way.
@@ -188,23 +219,8 @@ function cleanPendingRequest(authObj) {
 }
 
 module.exports.init = function() {
-    socketServer.on(route.connection('close'), id => {
-        var keyToDelete,
-            externalConnection;
-        for (var [key, value] of pendingAuthentications.entries()) {
-            if (value.id === id) {
-                pendingAuthentications.delete(key);
-                break;
-            }
-        }
-        pendingAuthentications.delete(keyToDelete);
-
-        externalConnection = ExternalApplication.getExternalConnectionById(id);
-        if (externalConnection) {
-            ExternalApplication.removeExternalConnection(externalConnection);
-            ofEvents.emit(route('externalconn', 'closed'), externalConnection);
-        }
-
+    //TODO: should this really live here?
+    ofEvents.on(route.externalApplication('disconnected'), () => {
         if (coreState.shouldCloseRuntime()) {
             electronApp.quit();
         }

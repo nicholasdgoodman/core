@@ -175,6 +175,7 @@ function initSubscriptionListeners(connectionIdentity: Identity): void {
     apiProtocolBase.registerSubscription(subAddedSubObj.unsubscribe, iabIdentity, uuid, name, SUB_ADDED);
     apiProtocolBase.registerSubscription(subRemovedSubObj.unsubscribe, iabIdentity, uuid, name, SUB_REMOVED);
 
+    //TODO: but what if connectionIdentity is an ExternalApplication?
     ofEvents.once(route.window('unload', uuid, name, false), (): void => {
         apiProtocolBase.removeSubscription(iabIdentity, uuid, name, SUB_ADDED);
         apiProtocolBase.removeSubscription(iabIdentity, uuid, name, SUB_REMOVED);
@@ -188,7 +189,9 @@ ofEvents.on(route.window('init-subscription-listeners'), (identity: Identity): v
     initSubscriptionListeners(identity);
 });
 
-apiProtocolBase.onClientAuthenticated(initSubscriptionListeners);
+ofEvents.on(route.externalApplication('connected'), (identity: Identity) => {
+    initSubscriptionListeners(identity);
+});
 
 function sendSubscriberEvent(identity: Identity, subscriber: Subscriber, action: string): void {
     const subscriberAdded = {
